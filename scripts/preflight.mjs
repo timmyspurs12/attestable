@@ -90,9 +90,9 @@ if (!addr) {
   try {
     const wei = BigInt(await rpc("eth_getBalance", [addr, "latest"]));
     const bnb = Number(wei) / 1e18;
-    if (bnb > 0.05) ok(`${addr} — ${bnb.toFixed(4)} tBNB`);
+    if (bnb > 0.002) ok(`${addr} — ${bnb.toFixed(4)} tBNB`);
     else {
-      bad(`${addr} — ${bnb.toFixed(4)} tBNB (low; top up at bnbchain.org/en/testnet-faucet)`);
+      bad(`${addr} — ${bnb.toFixed(4)} tBNB (too low — need ~0.002 tBNB)`);
       failures++;
     }
   } catch (e) {
