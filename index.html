@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ATTESTABLE — Verification Instrument</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+
+/* ============ TOKENS ============ */
+:root{
+  --bg: #FAF9F6;
+  --ink: #16150F;
+  --ink-soft: #4A4940;
+  --ink-faint: #8A897E;
+  --rule: #DDDAD0;
+  --rule-strong: #C7C3B6;
+  --accent: #D6410F;
+  --accent-ink: #FAF9F6;
+  --green: #1F5D3A;
+  --red: #8C2318;
+  --graphite: #6B6A63;
+  --font-display: 'Newsreader', serif;
+  --font-body: 'Public Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --radius: 2px;
+  --ease: cubic-bezier(.65,0,.35,1);
+  --dur: 150ms;
+}
+body.dark{
+  --bg: #1A1917;
+  --ink: #F4F2ED;
+  --ink-soft: #C7C3B6;
+  --ink-faint: #86847A;
+  --rule: #37352F;
+  --rule-strong: #47443B;
+  --accent: #E85526;
+  --accent-ink: #1A1917;
+  --green: #4C9271;
+  --red: #C55A45;
+  --graphite: #A6A498;
+}
+
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:
+    radial-gradient(circle at 1px 1px, rgba(120,115,95,0.05) 1px, transparent 0) 0 0/3px 3px,
+    var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+::selection{ background: var(--accent); color: var(--accent-ink); }
+
+.tabular{ font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+.mono{ font-family: var(--font-mono); }
+.serif{ font-family: var(--font-display); }
+
+.field-label{
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  font-weight: 500;
+  display:block;
+  margin-bottom: 8px;
+}
+
+a{ color: inherit; }
+button{ font-family: inherit; cursor: pointer; }
+*{ transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease), border-color var(--dur) var(--ease); }
+
+/* ============ SHELL ============ */
+.shell{ max-width: 1180px; margin: 0 auto; padding: 0 32px 130px; }
+
+.topbar{
+  display:flex; align-items:center; justify-content:space-between;
+  padding: 22px 32px;
+  border-bottom: 1px solid var(--rule);
+}
+.wordmark{
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.16em;
+}
+.wordmark .seal{
+  display:inline-block; width:7px; height:7px; background:var(--accent);
+  margin-right:9px; transform: rotate(45deg); position:relative; top:-1px;
+}
+.tabs{ display:flex; gap: 0; }
+.tab{
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--ink-faint);
+}
+.tab:hover{ color: var(--ink); }
+.tab.active{ color: var(--ink); border-bottom: 2px solid var(--accent); }
+.mode-toggle{
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  background: none; border: 1px solid var(--rule); padding: 7px 10px; border-radius: var(--radius);
+}
+.mode-toggle:hover{ border-color: var(--rule-strong); color: var(--ink); }
+
+.screen{ display:none; padding-top: 48px; }
+.screen.active{ display:block; }
+
+hr.rule{ border:none; border-top:1px solid var(--rule); margin: 0; }
+
+/* ============ SCREEN 1 — REPORT ============ */
+.report-head{
+  display:flex; justify-content:space-between; align-items:flex-start; gap: 40px;
+  flex-wrap: wrap;
+  padding-bottom: 28px; border-bottom: 1px solid var(--rule);
+}
+.agent-name{
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 36px;
+  letter-spacing: -0.01em;
+  margin: 10px 0 12px;
+}
+.identity-row{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+.hash-chip{
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.copy-btn{
+  background:none; border:none; padding:0; color: var(--ink-faint);
+  font-family: var(--font-mono); font-size: 11px;
+  text-decoration: underline; text-underline-offset: 2px;
+  margin-left: 6px;
+}
+.copy-btn:hover{ color: var(--accent); }
+.status-seal{
+  font-family: var(--font-mono);
+  font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--green);
+}
+.status-seal::before{ content:'●'; margin-right: 6px; font-size: 8px; position:relative; top:-1px; }
+
+/* hero metric — 4x+ scale jump from everything else */
+.hero-metric{
+  padding: 56px 0 44px;
+  border-bottom: 1px solid var(--rule);
+}
+.hero-number{
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(120px, 22vw, 300px);
+  line-height: 0.82;
+  letter-spacing: -0.03em;
+  margin: 0;
+}
+.hero-number sup{
+  font-size: 0.28em; font-weight: 400; color: var(--ink-faint); top:-0.5em; position:relative;
+}
+
+.field-strip{
+  display:flex; flex-wrap:wrap;
+  border-top: 1px solid var(--rule);
+}
+.field{
+  flex: 1 1 160px;
+  padding: 20px 24px 20px 0;
+  border-right: 1px solid var(--rule);
+}
+.field:last-child{ border-right: none; }
+.field .val{ font-family: var(--font-mono); font-size: 20px; }
+
+.section-title{
+  font-family: var(--font-mono);
+  font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint);
+  padding: 40px 0 16px;
+}
+
+table.ledger{ width:100%; border-collapse: collapse; border-top: 1px solid var(--rule-strong); }
+table.ledger th{
+  text-align:left; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--ink-faint); font-weight: 500;
+  padding: 12px 10px 12px 0; border-bottom: 1px solid var(--rule);
+}
+table.ledger td{
+  padding: 15px 10px 15px 0; border-bottom: 1px solid var(--rule);
+  font-size: 14px; vertical-align: middle;
+}
+table.ledger td.num{ font-family: var(--font-mono); }
+
+.stamp{
+  display:inline-block;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  padding: 4px 8px;
+  border: 1.5px solid currentColor;
+  border-radius: 1px;
+  transform: rotate(-2deg);
+}
+.stamp.approved{ color: var(--green); }
+.stamp.rejected{ color: var(--red); }
+.stamp.pending{ color: var(--graphite); transform: rotate(0deg); border-style: dashed; }
+
+.footer-note{
+  margin-top: 50px; padding-top: 18px; border-top: 1px solid var(--rule);
+  font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint);
+  display:flex; justify-content:space-between;
+}
+
+/* ============ SCREEN 2 — REPLAY (centrepiece) ============ */
+.replay-meta{ display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap: 16px;
+  padding-bottom: 24px; border-bottom: 1px solid var(--rule); }
+.replay-meta h2{ font-family: var(--font-display); font-weight:500; font-size: 30px; margin: 8px 0 0; }
+.demo-toggle{ display:flex; gap:0; }
+.demo-toggle button{
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing:0.1em; text-transform:uppercase;
+  background:none; border:1px solid var(--rule); padding:7px 12px; color: var(--ink-faint);
+}
+.demo-toggle button.active{ color: var(--ink); border-color: var(--ink); }
+.demo-toggle button:first-child{ border-right:none; }
+
+.recorder{ padding: 30px 0 0; }
+.threshold-graph{ width:100%; height: 130px; display:block; }
+.ticks-strip{
+  position: relative;
+  height: 90px;
+  border-top: 1px solid var(--rule-strong);
+  margin-top: -1px;
+  display:flex; align-items:flex-end;
+  gap: 2px;
+  padding: 0 1px;
+}
+.tick{
+  flex: 1 1 auto;
+  min-width: 2px;
+  background: var(--ink-faint);
+  cursor: pointer;
+}
+.tick:hover, .tick.selected{ background: var(--accent); }
+.tick.flag{ background: var(--red); }
+.tick.flag:hover, .tick.flag.selected{ background: var(--red); }
+
+.axis-row{
+  display:flex; justify-content:space-between;
+  font-family: var(--font-mono); font-size: 10px; color: var(--ink-faint);
+  padding: 10px 1px 0;
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 26px;
+}
+
+/* fixed instrument readout — replaces floating tooltip */
+.readout{
+  display:flex; gap: 0; border: 1px solid var(--rule); margin-top: 22px;
+}
+.readout .rf{ flex:1; padding: 14px 20px; border-right: 1px solid var(--rule); }
+.readout .rf:last-child{ border-right:none; }
+.readout .rf .val{ font-family: var(--font-mono); font-size: 16px; }
+.readout .rf .val.warn{ color: var(--red); }
+
+.specimen{ margin-top: 40px; padding-top: 30px; border-top: 1px solid var(--rule); }
+.specimen-top{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom: 26px; }
+
+.chain{ display:flex; align-items:stretch; }
+.stage{
+  flex: 1; border: 1px solid var(--rule); padding: 18px 18px; min-width: 0;
+}
+.stage.stage-fail{ border-color: var(--red); }
+.stage .fact{ font-family: var(--font-mono); font-size: 13px; margin: 0 0 7px; word-break: break-word; }
+.stage .fact:last-child{ margin-bottom:0; }
+.stage .fact .k{ color: var(--ink-faint); }
+.link{ width: 36px; flex: 0 0 36px; display:flex; align-items:center; justify-content:center; position: relative; }
+.link svg{ width: 100%; height: 26px; }
+.link.broken .link-label{
+  position:absolute; top: -18px; left:50%; transform: translateX(-50%);
+  font-family: var(--font-mono); font-size: 9px; color: var(--red);
+  letter-spacing: 0.08em; text-transform: uppercase; white-space:nowrap;
+}
+
+/* ============ SCREEN 3 — VERDICT ============ */
+.doc{
+  max-width: 720px; margin: 0 auto;
+  border: 1px solid var(--rule);
+  padding: 48px 54px 44px;
+}
+.doc-head{ display:flex; justify-content: space-between; border-bottom: 1px solid var(--rule); padding-bottom: 20px; margin-bottom: 24px;}
+.doc-head .h{ font-family: var(--font-display); font-size: 22px; font-weight:500;}
+.doc-row{ display:flex; justify-content:space-between; padding: 10px 0; border-bottom: 1px solid var(--rule); font-size: 14px;}
+.doc-row .v{ font-family: var(--font-mono); }
+
+.stamp-zone{ display:flex; justify-content:center; padding: 40px 0 14px; }
+.big-stamp{
+  font-family: var(--font-mono); font-weight: 700; font-size: 36px; letter-spacing: 0.06em;
+  border: 3px solid var(--green); color: var(--green);
+  padding: 12px 32px; border-radius: 2px;
+  opacity: 0;
+}
+.big-stamp.rejected{ border-color: var(--red); color: var(--red); }
+.big-stamp.slam{ animation: stamp-hit 150ms cubic-bezier(.2,.9,.4,1) forwards; }
+@keyframes stamp-hit{
+  0%{ opacity:0; transform: rotate(-10deg) scale(1.9); }
+  100%{ opacity:1; transform: rotate(-4deg) scale(1); }
+}
+
+.gate-list{ margin-top: 34px; border-top: 1px solid var(--rule); }
+.gate{ display:flex; justify-content:space-between; align-items:center; padding: 15px 0; border-bottom: 1px solid var(--rule); gap: 16px; }
+.gate .g-name{ font-size: 14.5px; }
+.gate .g-name .n{ color: var(--ink-faint); font-family: var(--font-mono); font-size: 12px; margin-right: 10px;}
+.gate .g-result{ display:flex; align-items:center; gap: 12px; }
+.gate .g-status{ font-family: var(--font-mono); font-size: 11px; letter-spacing:0.08em; text-transform: uppercase;}
+.gate .g-status.pass{ color: var(--green); }
+.gate .g-status.fail{ color: var(--red); }
+.gate .g-link{ font-family: var(--font-mono); font-size: 12px; color: var(--ink-faint); text-decoration: underline; text-underline-offset:3px; }
+.gate .g-link:hover{ color: var(--accent); }
+
+.certify-btn{
+  display:block; margin: 34px auto 0;
+  background: var(--accent); color: var(--accent-ink);
+  border: none; padding: 12px 22px; border-radius: var(--radius);
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.certify-btn:hover{ opacity: 0.9; }
+
+/* ============ SCREEN 4 — COMMISSION ============ */
+.commission-wrap{ display:grid; grid-template-columns: 1.15fr 0.85fr; gap: 0; }
+@media (max-width: 880px){ .commission-wrap{ grid-template-columns: 1fr; } }
+.requisition{ padding: 0 40px 0 0; border-right: 1px solid var(--rule); }
+.contract-preview{ padding: 0 0 0 40px; }
+@media (max-width: 880px){ .requisition{ border-right:none; border-bottom:1px solid var(--rule); padding: 0 0 30px; } .contract-preview{ padding: 30px 0 0; } }
+
+.requisition h3, .contract-preview h3{ font-family: var(--font-display); font-weight:500; font-size: 22px; margin: 8px 0 6px; }
+.requisition .sub{ color: var(--ink-faint); font-size: 13px; margin-bottom: 26px; }
+
+.form-sentence{ font-size: 17px; line-height: 2.2; color: var(--ink-soft); }
+.blank{
+  font-family: var(--font-mono); font-weight: 600; color: var(--ink);
+  border: none; border-bottom: 1.5px solid var(--accent);
+  background: transparent; padding: 1px 3px; min-width: 2ch; text-align: center; font-size: 16px;
+}
+.blank:focus{ outline:none; }
+select.blank{ appearance:none; -webkit-appearance:none; cursor:pointer; }
+
+.add-row{ margin-top: 24px; display:flex; justify-content:flex-end; }
+.add-btn{
+  background:none; border: 1px solid var(--ink); color: var(--ink);
+  padding: 9px 16px; border-radius: var(--radius);
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.add-btn:hover{ background: var(--ink); color: var(--bg); }
+
+.clauses{ border-top: 1px solid var(--rule); padding-top: 4px; margin-top: 20px; }
+.clause{ display:flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--rule); font-size: 14px; }
+.clause .cn{ font-family: var(--font-mono); color: var(--ink-faint); font-size: 12px; padding-top:1px;}
+
+.empty-note{ font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-faint); padding: 18px 0; }
+
+@media (max-width: 700px){
+  .shell{ padding: 0 18px 100px; }
+  .topbar{ padding: 18px; flex-wrap: wrap; gap: 14px; }
+  .doc{ padding: 30px 22px; }
+  .chain{ flex-direction: column; }
+  .link{ width: 100%; flex-basis: auto; height: 30px; }
+  .link svg{ transform: rotate(90deg); height: 30px; }
+  .field{ flex-basis: 45%; }
+}
+
+:focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wordmark"><span class="seal"></span>ATTESTABLE</div>
+  <div class="tabs">
+    <button class="tab active" data-screen="report">Report</button>
+    <button class="tab" data-screen="replay">Replay</button>
+    <button class="tab" data-screen="verdict">Verdict</button>
+    <button class="tab" data-screen="commission">Commission</button>
+  </div>
+  <button class="mode-toggle" id="modeToggle">Dark</button>
+</div>
+
+<div class="shell">
+
+  <!-- ============ SCREEN 1: AGENT REPORT CARD ============ -->
+  <section class="screen active" id="screen-report">
+    <div class="report-head">
+      <div>
+        <span class="field-label">Agent Report Card</span>
+        <h1 class="agent-name">Vault Guardian — 0x7F</h1>
+        <div class="identity-row">
+          <span class="hash-chip">ERC-8004 · <span class="mono tabular">0x7f3a…c209</span>
+            <button class="copy-btn" data-copy="0x7f3ac1e94d2b8a01f6e5d3c209">copy</button>
+          </span>
+          <span class="status-seal">Active on BNB Chain</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-metric">
+      <span class="field-label">Criteria-met rate — trailing 214 jobs</span>
+      <div class="hero-number tabular">98<sup>.6%</sup></div>
+    </div>
+
+    <div class="field-strip">
+      <div class="field"><span class="field-label">Jobs settled</span><span class="val tabular">214</span></div>
+      <div class="field"><span class="field-label">Jobs rejected</span><span class="val tabular">3</span></div>
+      <div class="field"><span class="field-label">Value settled</span><span class="val tabular">$1,842,610</span></div>
+      <div class="field"><span class="field-label">Evidence density</span><span class="val tabular">14.2 / job</span></div>
+      <div class="field"><span class="field-label">Median latency</span><span class="val tabular">41s</span></div>
+    </div>
+
+    <div class="section-title">Settlement ledger — most recent first</div>
+    <table class="ledger">
+      <thead>
+        <tr><th>Job</th><th>Client</th><th>Criterion</th><th>Verdict</th><th>Value</th><th>Settled</th></tr>
+      </thead>
+      <tbody id="ledgerBody"></tbody>
+    </table>
+
+    <div class="footer-note">
+      <span>Data current as of block <span class="mono tabular">41,208,117</span></span>
+      <span>All figures are on-chain attested</span>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN 2: DECISION REPLAY ============ -->
+  <section class="screen" id="screen-replay">
+    <div class="replay-meta">
+      <div>
+        <span class="field-label">Decision Replay — flight record</span>
+        <h2>Job <span class="mono">#J-11842</span> — health-factor maintenance, 7-day window</h2>
+      </div>
+      <div class="demo-toggle">
+        <button id="btnClean" class="active">Nominal</button>
+        <button id="btnFlag">Breach</button>
+      </div>
+    </div>
+
+    <div class="recorder">
+      <span class="field-label" style="padding-left:2px;">Tracked metric — health factor, threshold 1.60</span>
+      <svg class="threshold-graph" id="thresholdGraph" viewBox="0 0 1000 130" preserveAspectRatio="none"></svg>
+      <span class="field-label" style="padding-left:2px; margin-top:14px;">Decision density</span>
+      <div class="ticks-strip" id="ticksStrip"></div>
+      <div class="axis-row"><span>Day 0 · 00:00</span><span>Day 3 · 12:00</span><span>Day 7 · 00:00</span></div>
+
+      <div class="readout">
+        <div class="rf"><span class="field-label">Block</span><span class="val mono tabular" id="roBlock">—</span></div>
+        <div class="rf"><span class="field-label">Timestamp</span><span class="val mono" id="roTime">—</span></div>
+        <div class="rf"><span class="field-label">Health factor</span><span class="val mono tabular" id="roHF">—</span></div>
+        <div class="rf"><span class="field-label">Threshold state</span><span class="val mono" id="roState">—</span></div>
+      </div>
+    </div>
+
+    <div class="specimen" id="specimen">
+      <div class="specimen-top">
+        <div>
+          <span class="field-label">Specimen — evidence chain</span>
+          <span class="mono" id="specimenTitle" style="font-size:13px; color:var(--ink-soft);">Decision at block 41,201,004</span>
+        </div>
+        <span class="field-label" id="specimenTime">Day 4 · 06:41 UTC</span>
+      </div>
+      <div class="chain" id="chain"></div>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN 3: SETTLEMENT VERDICT ============ -->
+  <section class="screen" id="screen-verdict">
+    <span class="field-label" style="text-align:center; display:block; margin-bottom:20px;">Settlement Verdict</span>
+    <div class="doc">
+      <div class="doc-head">
+        <div class="h">Certificate of Settlement</div>
+        <span class="field-label" style="text-align:right;">No. <span class="mono">J-11774</span></span>
+      </div>
+      <div class="doc-row"><span>Agent</span><span class="v">Vault Guardian — 0x7f3a…c209</span></div>
+      <div class="doc-row"><span>Client</span><span class="v">0x5b0a…e881</span></div>
+      <div class="doc-row"><span>Acceptance criterion</span><span class="v">Oracle deviation ≤ 25bps, 100%, 14 days</span></div>
+      <div class="doc-row"><span>Sampled blocks</span><span class="v tabular">201,600</span></div>
+      <div class="doc-row"><span>Blocks within threshold</span><span class="v tabular">193,802 (96.1%)</span></div>
+      <div class="doc-row"><span>Escrowed value</span><span class="v tabular">$41,000.00</span></div>
+
+      <div class="stamp-zone">
+        <div class="big-stamp rejected" id="bigStamp">REJECTED</div>
+      </div>
+
+      <button class="certify-btn" id="certifyBtn">Re-run certification</button>
+
+      <div class="gate-list">
+        <div class="gate">
+          <div class="g-name"><span class="n">01</span>Oracle attestation present for every sampled block</div>
+          <div class="g-result"><span class="g-status pass">Pass</span><a class="g-link" href="#">evidence</a></div>
+        </div>
+        <div class="gate">
+          <div class="g-name"><span class="n">02</span>Decision hash chain unbroken, input to outcome</div>
+          <div class="g-result"><span class="g-status fail">Fail</span><a class="g-link" href="#">evidence</a></div>
+        </div>
+        <div class="gate">
+          <div class="g-name"><span class="n">03</span>Threshold breach duration under 100% of window</div>
+          <div class="g-result"><span class="g-status fail">Fail</span><a class="g-link" href="#">evidence</a></div>
+        </div>
+        <div class="gate">
+          <div class="g-name"><span class="n">04</span>Settlement transaction confirmed within 60s of window close</div>
+          <div class="g-result"><span class="g-status pass">Pass</span><a class="g-link" href="#">evidence</a></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN 4: JOB COMMISSIONING ============ -->
+  <section class="screen" id="screen-commission">
+    <span class="field-label" style="margin-bottom: 10px;">Job Commissioning</span>
+    <h2 style="font-family: var(--font-display); font-weight:500; font-size: 30px; margin: 0 0 34px;">Requisition — machine-checkable acceptance criteria</h2>
+
+    <div class="commission-wrap">
+      <div class="requisition">
+        <h3>Criterion builder</h3>
+        <div class="sub">Fill the blanks. Each requisition compiles to an on-chain checkable predicate.</div>
+
+        <div class="form-sentence">
+          Keep
+          <select class="blank" id="metricSelect">
+            <option>health factor</option>
+            <option>collateralization ratio</option>
+            <option>slippage</option>
+            <option>oracle deviation</option>
+          </select>
+          <span id="cmpWord">at or above</span>
+          <input class="blank" id="thresholdInput" value="1.6" size="4" inputmode="decimal">
+          across
+          <input class="blank" id="pctInput" value="95" size="3" inputmode="numeric">%
+          of sampled blocks for
+          <input class="blank" id="daysInput" value="7" size="2" inputmode="numeric">
+          days.
+        </div>
+
+        <div class="add-row">
+          <button class="add-btn" id="addClauseBtn">Add to requisition</button>
+        </div>
+      </div>
+
+      <div class="contract-preview">
+        <h3>Requisition clauses</h3>
+        <div class="clauses" id="clausesList">
+          <div class="empty-note">No criteria committed to this requisition.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+/* ---------- ledger ---------- */
+const ledgerData = [
+  {job:'J-11842', client:'0x91bd…4a7f', crit:'HF ≥ 1.60, 95%, 7d', verdict:'approved', value:'$18,400.00', date:'2026-08-21'},
+  {job:'J-11809', client:'0x22ff…9c11', crit:'Slippage ≤ 0.4%, 99%, 3d', verdict:'approved', value:'$6,120.00', date:'2026-08-18'},
+  {job:'J-11774', client:'0x5b0a…e881', crit:'Oracle dev. ≤ 25bps, 100%, 14d', verdict:'rejected', value:'$41,000.00', date:'2026-08-14'},
+  {job:'J-11760', client:'0x91bd…4a7f', crit:'HF ≥ 1.45, 90%, 30d', verdict:'approved', value:'$120,500.00', date:'2026-08-09'},
+  {job:'J-11722', client:'0xa004…2210', crit:'CR ≥ 150%, 98%, 7d', verdict:'pending', value:'$9,800.00', date:'2026-08-05'},
+  {job:'J-11701', client:'0x77c2…f30d', crit:'HF ≥ 1.60, 95%, 7d', verdict:'approved', value:'$18,400.00', date:'2026-08-02'},
+];
+const ledgerBody = document.getElementById('ledgerBody');
+ledgerData.forEach(r=>{
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td class="num">${r.job}</td><td class="num">${r.client}</td><td>${r.crit}</td>
+    <td><span class="stamp ${r.verdict}">${r.verdict.toUpperCase()}</span></td>
+    <td class="num">${r.value}</td><td class="num">${r.date}</td>`;
+  ledgerBody.appendChild(tr);
+});
+
+/* ---------- tabs ---------- */
+const tabs = document.querySelectorAll('.tab');
+const screens = document.querySelectorAll('.screen');
+tabs.forEach(t=>{
+  t.addEventListener('click', ()=>{
+    tabs.forEach(x=>x.classList.remove('active'));
+    screens.forEach(s=>s.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('screen-'+t.dataset.screen).classList.add('active');
+  });
+});
+
+/* ---------- dark mode ---------- */
+document.getElementById('modeToggle').addEventListener('click', function(){
+  document.body.classList.toggle('dark');
+  this.textContent = document.body.classList.contains('dark') ? 'Light' : 'Dark';
+  refreshGraphColor();
+});
+
+/* ---------- copy ---------- */
+document.querySelectorAll('.copy-btn').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    navigator.clipboard?.writeText(b.dataset.copy);
+    const orig = b.textContent;
+    b.textContent = 'copied';
+    setTimeout(()=>b.textContent = orig, 900);
+  });
+});
+
+/* ---------- replay: generate ticks + graph ---------- */
+const N = 90;
+const ticksStrip = document.getElementById('ticksStrip');
+let series = [], flaggedIdx = new Set();
+let seed = 7;
+function rand(){ seed = (seed*9301+49297)%233280; return seed/233280; }
+
+function buildSeries(mode){
+  seed = mode==='flag' ? 11 : 7;
+  series = []; flaggedIdx = new Set();
+  for(let i=0;i<N;i++){
+    let hf = 1.9 - Math.sin(i/14)*0.22 + (rand()-0.5)*0.1;
+    if(mode==='flag' && i>=48 && i<=54){ hf = 1.42 - (rand()*0.1); flaggedIdx.add(i); }
+    series.push(Math.max(1.15, hf));
+  }
+}
+
+function renderTicks(){
+  ticksStrip.innerHTML = '';
+  series.forEach((v,i)=>{
+    const tick = document.createElement('div');
+    tick.className = 'tick' + (flaggedIdx.has(i) ? ' flag' : '');
+    const h = 8 + Math.min(1, (v-1.15)/0.95) * 74;
+    tick.style.height = h + 'px';
+    tick.dataset.i = i;
+    tick.addEventListener('mouseenter', ()=> updateReadout(i));
+    tick.addEventListener('click', ()=> selectTick(i));
+    ticksStrip.appendChild(tick);
+  });
+}
+
+function dayLabel(i){
+  const totalHours = (i/N)*168;
+  const d = Math.floor(totalHours/24);
+  const h = Math.floor(totalHours%24);
+  return `Day ${d} · ${String(h).padStart(2,'0')}:00`;
+}
+
+const roBlock = document.getElementById('roBlock'), roTime = document.getElementById('roTime'),
+      roHF = document.getElementById('roHF'), roState = document.getElementById('roState');
+function updateReadout(i){
+  const block = 41200950 + i*23;
+  roBlock.textContent = block.toLocaleString();
+  roTime.textContent = dayLabel(i);
+  roHF.textContent = series[i].toFixed(3);
+  const below = flaggedIdx.has(i);
+  roState.textContent = below ? 'Below threshold' : 'Within threshold';
+  roHF.classList.toggle('warn', below);
+  roState.classList.toggle('warn', below);
+}
+
+const graph = document.getElementById('thresholdGraph');
+function renderGraph(){
+  const max=2.1, min=1.05;
+  function y(v){ return 118 - ((v-min)/(max-min))*104; }
+  const pts = series.map((v,i)=> `${(i/(N-1))*1000},${y(v)}`).join(' ');
+  const thresholdY = y(1.6);
+  graph.innerHTML = `
+    <line x1="0" y1="${thresholdY}" x2="1000" y2="${thresholdY}" stroke-width="1.4" stroke-dasharray="5 5" opacity="0.85" id="threshLine"/>
+    <polyline points="${pts}" fill="none" stroke-width="1.6" id="metricLine"/>
+  `;
+  refreshGraphColor();
+}
+function refreshGraphColor(){
+  const cs = getComputedStyle(document.body);
+  const t = graph.querySelector('#threshLine'), m = graph.querySelector('#metricLine');
+  if(t) t.setAttribute('stroke', cs.getPropertyValue('--red').trim());
+  if(m) m.setAttribute('stroke', cs.getPropertyValue('--ink').trim());
+}
+
+const specimen = document.getElementById('specimen');
+const chain = document.getElementById('chain');
+const specimenTitle = document.getElementById('specimenTitle');
+const specimenTime = document.getElementById('specimenTime');
+
+function linkSVG(broken){
+  if(!broken){
+    return `<svg viewBox="0 0 36 26"><ellipse cx="12" cy="13" rx="7" ry="9" fill="none" stroke="var(--ink-faint)" stroke-width="2"/><ellipse cx="24" cy="13" rx="7" ry="9" fill="none" stroke="var(--ink-faint)" stroke-width="2"/></svg>`;
+  }
+  return `<div class="link-label">Break</div><svg viewBox="0 0 36 26"><ellipse cx="12" cy="13" rx="7" ry="9" fill="none" stroke="var(--red)" stroke-width="2"/><path d="M17 6 L22 20" stroke="var(--red)" stroke-width="2"/><path d="M27 6 L22 20" stroke="var(--red)" stroke-width="2" transform="translate(4,0)"/></svg>`;
+}
+
+function selectTick(i){
+  document.querySelectorAll('.tick').forEach(t=>t.classList.remove('selected'));
+  document.querySelector(`.tick[data-i="${i}"]`).classList.add('selected');
+  updateReadout(i);
+  const broken = flaggedIdx.has(i) && i === Math.min(...[...flaggedIdx]) + 2;
+  const hf = series[i].toFixed(3);
+  const block = 41200950 + i*23;
+
+  specimenTitle.textContent = `Decision at block ${block.toLocaleString()}`;
+  specimenTime.textContent = dayLabel(i);
+
+  const stages = [
+    {label:'Inputs', sub:'Oracle-attested', fail:false, facts:[['Feed','Chainlink HF-agg'],['Value',hf],['Attestations','3/3']]},
+    {label:'Decision', sub:'Committed', fail:broken, facts:[['Action','Rebalance 4.2%'],['Policy hash', broken? '— missing —' : '0x9a2…f01'],['Committed','block '+block]]},
+    {label:'Action', sub:'On-chain tx', fail:false, facts:[['Tx','0x51c…9be2'],['Gas','0.00041 BNB'],['Confirmed','+1 block']]},
+    {label:'Outcome', sub:'Measured', fail:false, facts:[['Resulting HF', hf],['Threshold met', flaggedIdx.has(i)?'No':'Yes'],['Verified by','2 attestors']]},
+  ];
+
+  chain.innerHTML = '';
+  stages.forEach((s, idx)=>{
+    const div = document.createElement('div');
+    div.className = 'stage' + (s.fail ? ' stage-fail' : '');
+    div.innerHTML = `<span class="field-label">${s.label} — ${s.sub}</span>` +
+      s.facts.map(f=>`<div class="fact"><span class="k">${f[0]}: </span>${f[1]}</div>`).join('');
+    chain.appendChild(div);
+    if(idx < stages.length-1){
+      const l = document.createElement('div');
+      const isBroken = broken && idx===1;
+      l.className = 'link' + (isBroken ? ' broken' : '');
+      l.innerHTML = linkSVG(isBroken);
+      chain.appendChild(l);
+    }
+  });
+  specimen.classList.add('show');
+}
+
+const btnClean = document.getElementById('btnClean'), btnFlag = document.getElementById('btnFlag');
+function setMode(mode){
+  buildSeries(mode); renderTicks(); renderGraph();
+  btnClean.classList.toggle('active', mode==='clean');
+  btnFlag.classList.toggle('active', mode==='flag');
+  if(mode==='flag'){
+    const target = Math.min(...[...flaggedIdx]) + 2;
+    selectTick(target);
+  } else {
+    selectTick(20);
+  }
+}
+btnClean.addEventListener('click', ()=> setMode('clean'));
+btnFlag.addEventListener('click', ()=> setMode('flag'));
+setMode('flag');
+
+/* ---------- verdict stamp ---------- */
+const bigStamp = document.getElementById('bigStamp');
+function slamStamp(){
+  bigStamp.classList.remove('slam');
+  void bigStamp.offsetWidth;
+  bigStamp.classList.add('slam');
+}
+document.getElementById('certifyBtn').addEventListener('click', slamStamp);
+window.addEventListener('load', ()=> setTimeout(slamStamp, 150));
+
+/* ---------- commissioning ---------- */
+const metricSelect = document.getElementById('metricSelect');
+const cmpWord = document.getElementById('cmpWord');
+metricSelect.addEventListener('change', ()=>{
+  cmpWord.textContent = (metricSelect.value === 'slippage' || metricSelect.value === 'oracle deviation')
+    ? 'at or below' : 'at or above';
+});
+
+let clauseCount = 0;
+const clausesList = document.getElementById('clausesList');
+document.getElementById('addClauseBtn').addEventListener('click', ()=>{
+  const metric = metricSelect.value, cmp = cmpWord.textContent;
+  const th = document.getElementById('thresholdInput').value;
+  const pct = document.getElementById('pctInput').value;
+  const days = document.getElementById('daysInput').value;
+  if(clauseCount===0) clausesList.innerHTML='';
+  clauseCount++;
+  const row = document.createElement('div');
+  row.className = 'clause';
+  row.innerHTML = `<span class="cn">${String(clauseCount).padStart(2,'0')}</span>
+    <span>Keep <b>${metric}</b> ${cmp} <span class="mono">${th}</span> across <span class="mono">${pct}%</span> of sampled blocks for <span class="mono">${days}</span> days.</span>`;
+  clausesList.appendChild(row);
+});
+</script>
+
+<!-- chain layer: vendored so a demo never depends on a CDN -->
+<script src="vendor/ethers.umd.min.js"></script>
+<script src="config.js"></script>
+<script src="chain.js"></script>
+</body>
+</html>
