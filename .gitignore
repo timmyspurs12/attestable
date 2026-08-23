@@ -1,0 +1,11 @@
+.env
+node_modules/
+out/
+cache/
+artifacts/
+typechain-types/
+broadcast/
+.DS_Store
+# forge-std is fetched by scripts/setup.sh, not vendored
+lib/
+.foundry/
