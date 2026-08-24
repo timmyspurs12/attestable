@@ -1,1 +1,4 @@
-bundle-*.json
+# Reveal bundles ARE committed on purpose: publishing them proves nothing
+# on trust, because the report card re-hashes every reveal against the
+# on-chain commitments in the visitor's browser. A doctored bundle simply
+# fails to match and is flagged.
