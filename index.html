@@ -402,40 +402,40 @@ select.blank{ appearance:none; -webkit-appearance:none; cursor:pointer; }
     <div class="report-head">
       <div>
         <span class="field-label">Agent Report Card</span>
-        <h1 class="agent-name">Vault Guardian — 0x7F</h1>
+        <h1 class="agent-name">Agent — connecting…</h1>
         <div class="identity-row">
-          <span class="hash-chip">ERC-8004 · <span class="mono tabular">0x7f3a…c209</span>
-            <button class="copy-btn" data-copy="0x7f3ac1e94d2b8a01f6e5d3c209">copy</button>
+          <span class="hash-chip">ERC-8004 · <span class="mono tabular">0x…</span>
+            <button class="copy-btn" data-copy="">copy</button>
           </span>
-          <span class="status-seal">Active on BNB Chain</span>
+          <span class="status-seal">Reading from BNB Chain…</span>
         </div>
       </div>
     </div>
 
     <div class="hero-metric">
-      <span class="field-label">Criteria-met rate — trailing 214 jobs</span>
-      <div class="hero-number tabular">98<sup>.6%</sup></div>
+      <span class="field-label">Criteria-met rate</span>
+      <div class="hero-number tabular">—<sup></sup></div>
     </div>
 
     <div class="field-strip">
-      <div class="field"><span class="field-label">Jobs settled</span><span class="val tabular">214</span></div>
-      <div class="field"><span class="field-label">Jobs rejected</span><span class="val tabular">3</span></div>
-      <div class="field"><span class="field-label">Value settled</span><span class="val tabular">$1,842,610</span></div>
-      <div class="field"><span class="field-label">Evidence density</span><span class="val tabular">14.2 / job</span></div>
-      <div class="field"><span class="field-label">Median latency</span><span class="val tabular">41s</span></div>
+      <div class="field"><span class="field-label">Leaves committed</span><span class="val tabular">—</span></div>
+      <div class="field"><span class="field-label">Breach flags</span><span class="val tabular">—</span></div>
+      <div class="field"><span class="field-label">Record state</span><span class="val tabular">—</span></div>
+      <div class="field"><span class="field-label">Evidence shown</span><span class="val tabular">—</span></div>
+      <div class="field"><span class="field-label">chainHead</span><span class="val tabular">—</span></div>
     </div>
 
     <div class="section-title">Settlement ledger — most recent first</div>
     <table class="ledger">
       <thead>
-        <tr><th>Job</th><th>Client</th><th>Criterion</th><th>Verdict</th><th>Value</th><th>Settled</th></tr>
+        <tr><th>Job</th><th>Agent</th><th>Criterion</th><th>Verdict</th><th>Met</th><th>Sealed</th></tr>
       </thead>
       <tbody id="ledgerBody"></tbody>
     </table>
 
     <div class="footer-note">
-      <span>Data current as of block <span class="mono tabular">41,208,117</span></span>
-      <span>All figures are on-chain attested</span>
+      <span>Reading from BNB Chain…</span>
+      <span>Evidence is re-verified in your browser</span>
     </div>
   </section>
 
@@ -444,7 +444,7 @@ select.blank{ appearance:none; -webkit-appearance:none; cursor:pointer; }
     <div class="replay-meta">
       <div>
         <span class="field-label">Decision Replay — flight record</span>
-        <h2>Job <span class="mono">#J-11842</span> — health-factor maintenance, 7-day window</h2>
+        <h2>Job <span class="mono">—</span> — committed decisions</h2>
       </div>
       <div class="demo-toggle">
         <button id="btnClean" class="active">Nominal</button>
@@ -453,11 +453,11 @@ select.blank{ appearance:none; -webkit-appearance:none; cursor:pointer; }
     </div>
 
     <div class="recorder">
-      <span class="field-label" style="padding-left:2px;">Tracked metric — health factor, threshold 1.60</span>
+      <span class="field-label" style="padding-left:2px;">Tracked metric — reading from chain…</span>
       <svg class="threshold-graph" id="thresholdGraph" viewBox="0 0 1000 130" preserveAspectRatio="none"></svg>
       <span class="field-label" style="padding-left:2px; margin-top:14px;">Decision density</span>
       <div class="ticks-strip" id="ticksStrip"></div>
-      <div class="axis-row"><span>Day 0 · 00:00</span><span>Day 3 · 12:00</span><span>Day 7 · 00:00</span></div>
+      <div class="axis-row"><span>—</span><span></span><span>—</span></div>
 
       <div class="readout">
         <div class="rf"><span class="field-label">Block</span><span class="val mono tabular" id="roBlock">—</span></div>
@@ -471,9 +471,9 @@ select.blank{ appearance:none; -webkit-appearance:none; cursor:pointer; }
       <div class="specimen-top">
         <div>
           <span class="field-label">Specimen — evidence chain</span>
-          <span class="mono" id="specimenTitle" style="font-size:13px; color:var(--ink-soft);">Decision at block 41,201,004</span>
+          <span class="mono" id="specimenTitle" style="font-size:13px; color:var(--ink-soft);">—</span>
         </div>
-        <span class="field-label" id="specimenTime">Day 4 · 06:41 UTC</span>
+        <span class="field-label" id="specimenTime">—</span>
       </div>
       <div class="chain" id="chain"></div>
     </div>
@@ -485,17 +485,17 @@ select.blank{ appearance:none; -webkit-appearance:none; cursor:pointer; }
     <div class="doc">
       <div class="doc-head">
         <div class="h">Certificate of Settlement</div>
-        <span class="field-label" style="text-align:right;">No. <span class="mono">J-11774</span></span>
+        <span class="field-label" style="text-align:right;">No. <span class="mono">—</span></span>
       </div>
-      <div class="doc-row"><span>Agent</span><span class="v">Vault Guardian — 0x7f3a…c209</span></div>
-      <div class="doc-row"><span>Client</span><span class="v">0x5b0a…e881</span></div>
-      <div class="doc-row"><span>Acceptance criterion</span><span class="v">Oracle deviation ≤ 25bps, 100%, 14 days</span></div>
-      <div class="doc-row"><span>Sampled blocks</span><span class="v tabular">201,600</span></div>
-      <div class="doc-row"><span>Blocks within threshold</span><span class="v tabular">193,802 (96.1%)</span></div>
-      <div class="doc-row"><span>Escrowed value</span><span class="v tabular">$41,000.00</span></div>
+      <div class="doc-row"><span>Agent</span><span class="v">—</span></div>
+      <div class="doc-row"><span>Provider (hired)</span><span class="v">—</span></div>
+      <div class="doc-row"><span>Acceptance criterion</span><span class="v">—</span></div>
+      <div class="doc-row"><span>Committed leaves</span><span class="v tabular">—</span></div>
+      <div class="doc-row"><span>Samples within threshold</span><span class="v tabular">—</span></div>
+      <div class="doc-row"><span>Verdict reason</span><span class="v tabular">—</span></div>
 
       <div class="stamp-zone">
-        <div class="big-stamp rejected" id="bigStamp">REJECTED</div>
+        <div class="big-stamp rejected" id="bigStamp">—</div>
       </div>
 
       <button class="certify-btn" id="certifyBtn">Re-run certification</button>
@@ -567,19 +567,19 @@ select.blank{ appearance:none; -webkit-appearance:none; cursor:pointer; }
 <script>
 /* ---------- ledger ---------- */
 const ledgerData = [
-  {job:'J-11842', client:'0x91bd…4a7f', crit:'HF ≥ 1.60, 95%, 7d', verdict:'approved', value:'$18,400.00', date:'2026-08-21'},
-  {job:'J-11809', client:'0x22ff…9c11', crit:'Slippage ≤ 0.4%, 99%, 3d', verdict:'approved', value:'$6,120.00', date:'2026-08-18'},
-  {job:'J-11774', client:'0x5b0a…e881', crit:'Oracle dev. ≤ 25bps, 100%, 14d', verdict:'rejected', value:'$41,000.00', date:'2026-08-14'},
-  {job:'J-11760', client:'0x91bd…4a7f', crit:'HF ≥ 1.45, 90%, 30d', verdict:'approved', value:'$120,500.00', date:'2026-08-09'},
-  {job:'J-11722', client:'0xa004…2210', crit:'CR ≥ 150%, 98%, 7d', verdict:'pending', value:'$9,800.00', date:'2026-08-05'},
-  {job:'J-11701', client:'0x77c2…f30d', crit:'HF ≥ 1.60, 95%, 7d', verdict:'approved', value:'$18,400.00', date:'2026-08-02'},
+  {job:'demo-01', client:'0x91bd…4a7f', crit:'HF ≥ 1.60, 95%, 7d', verdict:'approved', met:'24/24', date:'2026-08-21'},
+  {job:'demo-02', client:'0x22ff…9c11', crit:'Slippage ≤ 0.4%, 99%, 3d', verdict:'approved', met:'71/72', date:'2026-08-18'},
+  {job:'demo-03', client:'0x5b0a…e881', crit:'Oracle dev. ≤ 25bps, 100%, 14d', verdict:'rejected', met:'310/336', date:'2026-08-14'},
+  {job:'demo-04', client:'0x91bd…4a7f', crit:'HF ≥ 1.45, 90%, 30d', verdict:'approved', met:'715/720', date:'2026-08-09'},
+  {job:'demo-05', client:'0xa004…2210', crit:'CR ≥ 150%, 98%, 7d', verdict:'pending', met:'—', date:'2026-08-05'},
+  {job:'demo-06', client:'0x77c2…f30d', crit:'HF ≥ 1.60, 95%, 7d', verdict:'approved', met:'168/168', date:'2026-08-02'},
 ];
 const ledgerBody = document.getElementById('ledgerBody');
 ledgerData.forEach(r=>{
   const tr = document.createElement('tr');
   tr.innerHTML = `<td class="num">${r.job}</td><td class="num">${r.client}</td><td>${r.crit}</td>
     <td><span class="stamp ${r.verdict}">${r.verdict.toUpperCase()}</span></td>
-    <td class="num">${r.value}</td><td class="num">${r.date}</td>`;
+    <td class="num">${r.met}</td><td class="num">${r.date}</td>`;
   ledgerBody.appendChild(tr);
 });
 
@@ -785,5 +785,5 @@ document.getElementById('addClauseBtn').addEventListener('click', ()=>{
 <script src="vendor/ethers.umd.min.js"></script>
 <script src="config.js"></script>
 <script src="chain.js"></script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3015d4e3d4f0e24',t:'MTc4NzU2NDEwMA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>

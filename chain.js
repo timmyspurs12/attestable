@@ -4,6 +4,14 @@
  * every claim in the browser. Nothing here is privileged: it is the same path
  * an auditor takes, which is the entire point of the product.
  *
+ * Live mode (config.js filled):
+ *   - every hardcoded demo number in index.html is overwritten with chain data
+ *   - the verdict shown is the REAL verdict: check() is replayed via eth_call
+ *     with the full evidence (leaves + reveal bundle), the same call settle()
+ *     would make
+ *   - the reveal bundle is independently re-hashed against the on-chain
+ *     commitments — a doctored bundle fails to match and is flagged
+ *
  * Falls back to demonstration data when config.js has no addresses, and says
  * so on screen. A demo that silently shows fake numbers as if they were real
  * is worse than no demo.
@@ -18,10 +26,14 @@
   // ABI — only what we call
   // ---------------------------------------------------------------
 
+  const LEAF_TUPLE =
+    "tuple(bytes32 inputsHash, bytes32 attestationId, bytes32 policyVersion, bytes32 decisionHash, bytes32 actionTxHash, uint64 observedAt)";
+  const REVEAL_TUPLE = "tuple(bytes32 metric, int256 value)";
+
   const REGISTRY_ABI = [
     "function recordOf(uint256) view returns (tuple(address agent, bytes32 chainHead, uint32 leafCount, uint64 firstObservedAt, uint64 lastObservedAt, uint64 sealedAt, bool isSealed))",
-    "function verifyChain(uint256, tuple(bytes32 inputsHash, bytes32 attestationId, bytes32 policyVersion, bytes32 decisionHash, bytes32 actionTxHash, uint64 observedAt)[]) view returns (bool)",
-    "event LeafCommitted(uint256 indexed jobId, uint32 indexed index, bytes32 chainHead, tuple(bytes32 inputsHash, bytes32 attestationId, bytes32 policyVersion, bytes32 decisionHash, bytes32 actionTxHash, uint64 observedAt) leaf)",
+    "function verifyChain(uint256, " + LEAF_TUPLE + "[]) view returns (bool)",
+    "event LeafCommitted(uint256 indexed jobId, uint32 indexed index, bytes32 chainHead, " + LEAF_TUPLE + " leaf)",
     "event RecordSealed(uint256 indexed jobId, bytes32 chainHead, uint32 leafCount, uint64 sealedAt, string blobURI)",
   ];
 
@@ -29,7 +41,7 @@
     "function termsOf(uint256) view returns (address provider, bytes32 criteriaHash, uint64 submittedAt, bool bound)",
     "function criteriaOf(uint256) view returns (tuple(bytes32 metric, uint8 op, int256 threshold, uint16 minSamplePct, uint32 minSamples, uint32 maxGapSeconds)[])",
     "function check(uint256, bytes) view returns (uint8 verdict, bytes32 reason)",
-    "function observationHash(bytes32 metric, int256 value, uint64 observedAt) pure returns (bytes32)",
+    "function observationHash(bytes32, int256, uint64) pure returns (bytes32)",
     "function proofWindow() view returns (uint64)",
   ];
 
@@ -41,6 +53,21 @@
   const VERDICT = ["PENDING", "APPROVED", "REJECTED"];
   const OPS = ["≥", "≤", "="];
 
+  const REASONS = {};
+  [
+    ["ATTESTABLE_APPROVED", "approved — criteria met"],
+    ["ATTESTABLE_REJECTED_NO_EVIDENCE", "rejected — no evidence"],
+    ["ATTESTABLE_REJECTED_TOO_FEW_SAMPLES", "rejected — too few samples"],
+    ["ATTESTABLE_REJECTED_WRONG_AGENT", "rejected — wrong agent"],
+    ["ATTESTABLE_REJECTED_CRITERIA", "rejected — criteria unmet"],
+  ].forEach(([k, v]) => (REASONS[E.keccak256(E.toUtf8Bytes(k))] = v));
+
+  // ---------------------------------------------------------------
+  // State
+  // ---------------------------------------------------------------
+
+  const S = { provider: null, reg: null, pol: null, cache: {}, active: 0 };
+
   // ---------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------
@@ -48,34 +75,65 @@
   const configured = () =>
     !!(CFG.evidenceRegistry && CFG.proofPolicy && (CFG.jobs || []).length);
 
-  const short = (h) => (h ? h.slice(0, 6) + "…" + h.slice(-4) : "—");
+  const short = (h) => (h ? String(h).slice(0, 6) + "…" + String(h).slice(-4) : "—");
   const wad = (v) => Number(E.formatUnits(v, 18));
 
   function metricName(id) {
     return (METRICS[id] || "unknown").replace(/_/g, " ");
   }
 
+  function provider() {
+    if (!S.provider) {
+      S.provider = new E.JsonRpcProvider(CFG.rpcUrl, CFG.chainId, {
+        staticNetwork: true,
+      });
+      S.reg = new E.Contract(CFG.evidenceRegistry, REGISTRY_ABI, S.provider);
+      S.pol = new E.Contract(CFG.proofPolicy, POLICY_ABI, S.provider);
+    }
+    return S.provider;
+  }
+
+  /* Public RPCs cap eth_getLogs block ranges (publicnode: 50k). Scan in
+   * chunks just under the cap so it works everywhere, forever. */
+  async function queryFilterChunked(contract, filter, fromBlock) {
+    const MAX = 49000;
+    const toBlock = await provider().getBlockNumber();
+    if (toBlock - fromBlock <= MAX) {
+      return contract.queryFilter(filter, fromBlock, toBlock);
+    }
+    const out = [];
+    for (let s = fromBlock; s <= toBlock; s += MAX) {
+      out.push(...(await contract.queryFilter(filter, s, Math.min(s + MAX - 1, toBlock))));
+    }
+    return out;
+  }
+
+  const critText = (c) =>
+    c
+      ? `${metricName(c.metric)} ${OPS[Number(c.op)]} ${wad(c.threshold)}, ` +
+        `${Number(c.minSamplePct) / 100}%`
+      : "—";
+
   // ---------------------------------------------------------------
   // Reads
   // ---------------------------------------------------------------
 
   async function loadJob(jobId) {
-    const provider = new E.JsonRpcProvider(CFG.rpcUrl, CFG.chainId, {
-      staticNetwork: true,
-    });
-    const reg = new E.Contract(CFG.evidenceRegistry, REGISTRY_ABI, provider);
-    const pol = new E.Contract(CFG.proofPolicy, POLICY_ABI, provider);
+    provider();
 
     const [record, terms, criteria] = await Promise.all([
-      reg.recordOf(jobId),
-      pol.termsOf(jobId),
-      pol.criteriaOf(jobId),
+      S.reg.recordOf(jobId),
+      S.pol.termsOf(jobId),
+      S.pol.criteriaOf(jobId),
     ]);
 
     // Rebuild the decision log from events. Storage holds only the 32-byte
     // accumulator; the leaves live in logs, exactly as designed.
-    const filter = reg.filters.LeafCommitted(jobId);
-    const logs = await reg.queryFilter(filter, CFG.fromBlock || 0, "latest");
+    const logs = await queryFilterChunked(
+      S.reg,
+      S.reg.filters.LeafCommitted(jobId),
+      CFG.fromBlock || 0,
+    );
     const leaves = logs
       .map((l) => ({
         index: Number(l.args.index),
@@ -93,25 +151,15 @@
 
     let blobURI = null;
     try {
-      const sealed = await reg.queryFilter(
-        reg.filters.RecordSealed(jobId),
+      const sealed = await queryFilterChunked(
+        S.reg,
+        S.reg.filters.RecordSealed(jobId),
         CFG.fromBlock || 0,
-        "latest",
       );
       if (sealed.length) blobURI = sealed[sealed.length - 1].args.blobURI;
     } catch (_) {}
 
-    // State-derived verdict. A full APPROVE additionally needs the complete
-    // leaf set as calldata — see reverify() below.
-    let verdict = 0,
-      reason = E.ZeroHash;
-    try {
-      const v = await pol.check(jobId, "0x");
-      verdict = Number(v[0]);
-      reason = v[1];
-    } catch (_) {}
-
-    return { jobId, record, terms, criteria, leaves, blobURI, verdict, reason, reg, pol };
+    return { jobId, record, terms, criteria, leaves, blobURI, verdict: 0, reason: E.ZeroHash };
   }
 
   /* Independently verify a reveal bundle against the on-chain commitments.
@@ -155,6 +203,76 @@
     return out;
   }
 
+  /* Replay the settlement itself: check(jobId, full evidence) via eth_call.
+   * This is exactly the call settle() would make — the verdict on screen is
+   * the contract's verdict, not the frontend's opinion. */
+  async function settleVerdict(job, bundle) {
+    if (!bundle || !bundle.reveals || !job.leaves.length) return null;
+    if (bundle.reveals.length !== job.leaves.length) return null;
+    try {
+      const leaves = job.leaves.map((l) => [
+        l.inputsHash,
+        l.attestationId,
+        l.policyVersion,
+        l.decisionHash,
+        l.actionTxHash,
+        l.observedAt,
+      ]);
+      const reveals = bundle.reveals.map((r) => {
+        const n = normalize(r);
+        return [n.metricId, n.raw];
+      });
+      const evidence = E.AbiCoder.defaultAbiCoder().encode(
+        [LEAF_TUPLE + "[]", REVEAL_TUPLE + "[]"],
+        [leaves, reveals],
+      );
+      const v = await S.pol.check(job.jobId, evidence);
+      return { verdict: Number(v[0]), reason: v[1] };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /* Share of revealed samples that met the criterion — computed in-browser,
+   * shown next to the on-chain verdict. */
+  function criteriaPct(job, bundle) {
+    const c = job.criteria && job.criteria[0];
+    if (!c || !bundle || !bundle.reveals || !job.leaves.length) return null;
+    let met = 0;
+    job.leaves.forEach((_, i) => {
+      const r = normalize(bundle.reveals[i]);
+      if (!r) return;
+      const t = wad(c.threshold);
+      const op = Number(c.op);
+      if ((op === 0 && r.num >= t) || (op === 1 && r.num <= t) || (op === 2 && r.num === t)) met++;
+    });
+    return { met, total: job.leaves.length, pct: (100 * met) / job.leaves.length };
+  }
+
+  async function loadJobWithEvidence(idx) {
+    if (S.cache[idx]) return S.cache[idx];
+    const id = CFG.jobs[idx].id;
+    const job = await loadJob(BigInt(id));
+    let bundle = null,
+      check = null,
+      settled = null;
+    try {
+      const res = await fetch(`data/bundle-${id}.json`);
+      if (res.ok) {
+        bundle = await res.json();
+        check = await reverify(job, bundle);
+      }
+    } catch (_) {}
+    if (check && check.ok) settled = await settleVerdict(job, bundle);
+    if (settled) {
+      job.verdict = settled.verdict;
+      job.reason = settled.reason;
+    }
+    const entry = { idx, job, bundle, check, pct: criteriaPct(job, bundle) };
+    S.cache[idx] = entry;
+    return entry;
+  }
+
   // ---------------------------------------------------------------
   // Rendering — reuses the ids already in index.html
   // ---------------------------------------------------------------
@@ -173,35 +291,91 @@
     el.textContent = text;
   }
 
-  function renderLedger(job) {
+  function injectStyles() {
+    const css = document.createElement("style");
+    css.textContent = `
+      #jobBar{display:flex;gap:8px;flex-wrap:wrap;padding:10px 32px;border-bottom:1px solid var(--rule);align-items:center}
+      #jobBar .jb-label{font-family:var(--font-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint)}
+      #jobBar button{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
+        background:none;border:1px solid var(--rule);color:var(--ink);padding:5px 10px;cursor:pointer}
+      #jobBar button:hover{border-color:var(--ink)}
+      #jobBar button.active{border-color:var(--accent);color:var(--accent)}
+      #ledgerBody tr.live-row{cursor:pointer}
+      #ledgerBody tr.live-row:hover td{background:rgba(0,0,0,.03)}
+      body.dark #ledgerBody tr.live-row:hover td{background:rgba(255,255,255,.05)}
+    `;
+    document.head.appendChild(css);
+  }
+
+  function renderJobBar(active) {
+    let bar = document.getElementById("jobBar");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "jobBar";
+      document.getElementById("dataSource").after(bar);
+    }
+    bar.innerHTML =
+      `<span class="jb-label">On-chain jobs —</span>` +
+      CFG.jobs
+        .map(
+          (j, i) =>
+            `<button data-idx="${i}" class="${i === active ? "active" : ""}">${
+              j.label || "job " + (i + 1)
+            }</button>`,
+        )
+        .join("");
+    bar.querySelectorAll("button").forEach((b) =>
+      b.addEventListener("click", () => selectJob(Number(b.dataset.idx))),
+    );
+  }
+
+  function renderLedger(entries, active) {
     const body = document.getElementById("ledgerBody");
     if (!body) return;
-    const v = VERDICT[job.verdict].toLowerCase();
-    const c = job.criteria[0];
-    const crit = c
-      ? `${metricName(c.metric)} ${OPS[Number(c.op)]} ${wad(c.threshold)}, ` +
-        `${Number(c.minSamplePct) / 100}%`
-      : "—";
+
+    // Relabel the header for live data (no escrow values in this demo).
+    const th = document.querySelectorAll("#screen-report .ledger thead th");
+    if (th.length >= 6) {
+      th[1].textContent = "Agent";
+      th[4].textContent = "Met";
+      th[5].textContent = "Sealed";
+    }
 
     body.innerHTML = "";
-    const tr = document.createElement("tr");
-    tr.innerHTML =
-      `<td class="num">${short(E.toBeHex(job.jobId, 32))}</td>` +
-      `<td class="num">${short(job.terms.provider)}</td>` +
-      `<td>${crit}</td>` +
-      `<td><span class="stamp ${v}">${VERDICT[job.verdict]}</span></td>` +
-      `<td class="num">${job.record.leafCount} leaves</td>` +
-      `<td class="num">${
-        job.record.sealedAt > 0n
-          ? new Date(Number(job.record.sealedAt) * 1000).toISOString().slice(0, 10)
-          : "—"
-      }</td>`;
-    body.appendChild(tr);
+    entries
+      .slice()
+      .sort((a, b) => Number(b.job.record.sealedAt || 0n) - Number(a.job.record.sealedAt || 0n))
+      .forEach((e) => {
+        const v = VERDICT[e.job.verdict].toLowerCase();
+        const tr = document.createElement("tr");
+        tr.className = "live-row" + (e.idx === active ? " active" : "");
+        tr.title = "Load this job";
+        tr.innerHTML =
+          `<td class="num">${short(E.toBeHex(e.job.jobId, 32))}</td>` +
+          `<td class="num">${short(e.job.record.agent)}</td>` +
+          `<td>${critText(e.job.criteria[0])}</td>` +
+          `<td><span class="stamp ${v}">${VERDICT[e.job.verdict]}</span></td>` +
+          `<td class="num">${e.pct ? e.pct.met + "/" + e.pct.total : "—"}</td>` +
+          `<td class="num">${
+            e.job.record.sealedAt > 0n
+              ? new Date(Number(e.job.record.sealedAt) * 1000).toISOString().slice(0, 10)
+              : "—"
+          }</td>`;
+        tr.addEventListener("click", () => selectJob(e.idx));
+        body.appendChild(tr);
+      });
+  }
 
+  function renderReport(e) {
+    const job = e.job;
     const hero = document.querySelector(".hero-number");
     if (hero) {
-      const pct = job.verdict === 1 ? "100" : job.verdict === 2 ? "0" : "—";
-      hero.innerHTML = `${pct}<sup>${pct === "—" ? "" : ".0%"}</sup>`;
+      if (e.pct) {
+        const p = e.pct.pct.toFixed(1);
+        hero.innerHTML = `${p.split(".")[0]}<sup>.${p.split(".")[1]}%</sup>`;
+      } else {
+        hero.innerHTML = `—`;
+      }
     }
     const label = document.querySelector(".hero-metric .field-label");
     if (label) label.textContent = `Criteria-met rate — job ${short(E.toBeHex(job.jobId, 32))}`;
@@ -211,25 +385,72 @@
 
     const chip = document.querySelector(".hash-chip .mono");
     if (chip) chip.textContent = short(job.record.agent);
+    const copy = document.querySelector(".copy-btn");
+    if (copy) copy.dataset.copy = job.record.agent;
+    const seal = document.querySelector(".status-seal");
+    if (seal) seal.textContent = "Live on BSC testnet";
 
-    const fields = document.querySelectorAll(".field .val");
-    if (fields.length >= 5) {
-      fields[0].textContent = String(job.record.leafCount);
-      fields[1].textContent = job.verdict === 2 ? "1" : "0";
-      fields[2].textContent = job.record.isSealed ? "sealed" : "open";
-      fields[3].textContent = `${job.leaves.length} leaves`;
-      fields[4].textContent = short(job.record.chainHead);
-    }
+    // Relabel the field strip, then fill it — labels must match live data.
+    const fields = document.querySelectorAll("#screen-report .field-strip .field");
+    const LIVE = [
+      ["Leaves committed", String(job.record.leafCount)],
+      ["Breach flags", String(e.pct ? e.pct.total - e.pct.met : "—")],
+      ["Record state", job.record.isSealed ? "sealed" : "open"],
+      ["Evidence shown", `${job.leaves.length} leaves`],
+      ["chainHead", short(job.record.chainHead)],
+    ];
+    fields.forEach((f, i) => {
+      if (LIVE[i]) {
+        const l = f.querySelector(".field-label");
+        const v = f.querySelector(".val");
+        if (l) l.textContent = LIVE[i][0];
+        if (v) v.textContent = LIVE[i][1];
+      }
+    });
 
     const note = document.querySelector(".footer-note");
     if (note) {
       note.innerHTML =
         `<span>chainHead <span class="mono">${short(job.record.chainHead)}</span></span>` +
-        `<span>Read live from BSC testnet · chainId ${CFG.chainId}</span>`;
+        `<span>Verdict replayed live from BSC testnet · chainId ${CFG.chainId}</span>`;
     }
   }
 
-  function renderVerdict(job) {
+  function renderVerdict(e) {
+    const job = e.job;
+    const rows = document.querySelectorAll("#screen-verdict .doc-row");
+    const vals = document.querySelectorAll("#screen-verdict .doc-row .v");
+    const reasonTxt =
+      REASONS[job.reason] || (job.reason && job.reason !== E.ZeroHash ? short(job.reason) : "—");
+    if (vals.length >= 6) {
+      vals[0].textContent = short(job.record.agent);
+      vals[1].textContent = short(job.terms.provider);
+      vals[2].textContent = job.criteria[0]
+        ? `${critText(job.criteria[0])}, ≥${job.criteria[0].minSamples} samples`
+        : "unbound";
+      vals[3].textContent = String(job.record.leafCount);
+      vals[4].textContent = e.pct
+        ? `${e.pct.met} of ${e.pct.total} (${e.pct.pct.toFixed(1)}%)`
+        : "—";
+      vals[5].textContent = reasonTxt;
+    }
+    // Relabel rows whose demo meaning doesn't apply to live data.
+    const LIVE_LABELS = [
+      "Agent",
+      "Provider (hired)",
+      "Acceptance criterion",
+      "Committed leaves",
+      "Samples within threshold",
+      "Verdict reason",
+    ];
+    rows.forEach((r, i) => {
+      const l = r.querySelector("span:first-child");
+      if (l && LIVE_LABELS[i]) l.textContent = LIVE_LABELS[i];
+    });
+
+    const no = document.querySelector("#screen-verdict .doc-head .field-label");
+    if (no) no.innerHTML = `No. <span class="mono">${short(E.toBeHex(job.jobId, 32))}</span>`;
+
     const stamp = document.getElementById("bigStamp");
     if (stamp) {
       stamp.textContent = VERDICT[job.verdict];
@@ -238,48 +459,43 @@
       void stamp.offsetWidth;
       stamp.classList.add("slam");
     }
-    const rows = document.querySelectorAll("#screen-verdict .doc-row .v");
-    if (rows.length >= 6) {
-      rows[0].textContent = short(job.record.agent);
-      rows[1].textContent = short(job.terms.provider);
-      const c = job.criteria[0];
-      rows[2].textContent = c
-        ? `${metricName(c.metric)} ${OPS[Number(c.op)]} ${wad(c.threshold)}, ` +
-          `${Number(c.minSamplePct) / 100}%, ≥${c.minSamples} samples`
-        : "unbound";
-      rows[3].textContent = String(job.record.leafCount);
-      rows[4].textContent = job.record.isSealed ? "sealed" : "not sealed";
-      rows[5].textContent = short(job.reason);
-    }
   }
 
-  function renderReplay(job, bundle, check) {
+  function renderReplay(e) {
+    const job = e.job;
     const strip = document.getElementById("ticksStrip");
     const graph = document.getElementById("thresholdGraph");
     if (!strip || !job.leaves.length) return;
 
     const c = job.criteria[0];
     const threshold = c ? wad(c.threshold) : null;
-    const vals = bundle
+    const vals = e.bundle
       ? job.leaves.map((_, i) => {
-          const r = normalize(bundle.reveals[i]);
+          const r = normalize(e.bundle.reveals[i]);
           return r ? r.num : null;
         })
       : null;
+
+    const tracked = document.querySelector(".recorder .field-label");
+    if (tracked && c) {
+      tracked.textContent = `Tracked metric — ${metricName(c.metric)} ${OPS[Number(c.op)]} ${wad(
+        c.threshold,
+      )}`;
+    }
 
     strip.innerHTML = "";
     job.leaves.forEach((leaf, i) => {
       const t = document.createElement("div");
       const v = vals ? vals[i] : null;
       const bad =
-        (check && check.mismatches.includes(i)) ||
+        (e.check && e.check.mismatches.includes(i)) ||
         (v !== null && threshold !== null && v < threshold);
       t.className = "tick" + (bad ? " flag" : "");
       t.style.height =
         (v !== null ? 8 + Math.min(1, Math.max(0, (v - 1) / 1.2)) * 74 : 42) + "px";
       t.dataset.i = i;
       t.addEventListener("mouseenter", () => readout(job, i, v, threshold));
-      t.addEventListener("click", () => specimen(job, i, v, threshold, check));
+      t.addEventListener("click", () => specimen(job, i, v, threshold, e.check));
       strip.appendChild(t);
     });
 
@@ -298,6 +514,22 @@
       graph.innerHTML = "";
     }
 
+    // Real time axis instead of the demo's fixed 7-day labels.
+    const axis = document.querySelector(".axis-row");
+    if (axis && job.leaves.length) {
+      const spans = axis.querySelectorAll("span");
+      const f = new Date(job.leaves[0].observedAt * 1000);
+      const l = new Date(job.leaves[job.leaves.length - 1].observedAt * 1000);
+      const mid = new Date((f.getTime() + l.getTime()) / 2);
+      const fmt = (d) =>
+        d.toISOString().slice(5, 10).replace("-", "·") + " " + d.toISOString().slice(11, 16);
+      if (spans.length >= 3) {
+        spans[0].textContent = fmt(f);
+        spans[1].textContent = fmt(mid);
+        spans[2].textContent = fmt(l);
+      }
+    }
+
     const h2 = document.querySelector(".replay-meta h2");
     if (h2)
       h2.innerHTML = `Job <span class="mono">${short(
@@ -307,7 +539,7 @@
     const toggle = document.querySelector(".demo-toggle");
     if (toggle) toggle.style.display = "none";
 
-    specimen(job, 0, vals ? vals[0] : null, threshold, check);
+    specimen(job, 0, vals ? vals[0] : null, threshold, e.check);
   }
 
   function readout(job, i, v, threshold) {
@@ -401,6 +633,42 @@
     });
   }
 
+  function liveBanner(e) {
+    const job = e.job;
+    let msg = `Live · BSC testnet · ${job.leaves.length} leaves · verdict ${VERDICT[job.verdict]}`;
+    if (REASONS[job.reason]) msg += ` · ${REASONS[job.reason].split(" — ")[1]}`;
+    if (e.check) {
+      msg += e.check.ok
+        ? ` · ${e.check.matched}/${e.check.total} reveals verified in-browser`
+        : ` · ${e.check.mismatches.length} reveal mismatch(es) detected`;
+    }
+    banner(msg, true);
+  }
+
+  function renderAll(e) {
+    renderReport(e);
+    renderVerdict(e);
+    renderReplay(e);
+    renderJobBar(e.idx);
+    liveBanner(e);
+    const known = Object.values(S.cache);
+    if (known.length) renderLedger(known, e.idx);
+  }
+
+  async function selectJob(idx) {
+    if (idx === S.active && S.cache[idx]) return;
+    S.active = idx;
+    renderJobBar(idx);
+    banner(`Loading ${CFG.jobs[idx].label || "job"} from BSC testnet…`, false);
+    try {
+      const e = await loadJobWithEvidence(idx);
+      if (S.active === idx) renderAll(e);
+    } catch (err) {
+      console.error(err);
+      banner("Chain read failed — showing demonstration data. " + (err.shortMessage || err.message), false);
+    }
+  }
+
   // ---------------------------------------------------------------
   // Boot
   // ---------------------------------------------------------------
@@ -410,33 +678,29 @@
       banner("Demonstration data — no contracts configured in config.js", false);
       return;
     }
+    injectStyles();
     banner("Connecting to BSC testnet…", false);
     try {
-      const jobId = BigInt(CFG.jobs[0].id);
-      const job = await loadJob(jobId);
+      const e = await loadJobWithEvidence(0);
+      S.active = 0;
+      renderAll(e);
+      window.ATTESTABLE = {
+        entry: e,
+        cache: S.cache,
+        loadJob,
+        reverify,
+        normalize,
+        settleVerdict,
+        selectJob,
+      };
 
-      let bundle = null,
-        check = null;
-      try {
-        const res = await fetch(`data/bundle-${CFG.jobs[0].id}.json`);
-        if (res.ok) {
-          bundle = await res.json();
-          check = await reverify(job, bundle);
-        }
-      } catch (_) {}
-
-      renderLedger(job);
-      renderVerdict(job);
-      renderReplay(job, bundle, check);
-
-      let msg = `Live · BSC testnet · ${job.leaves.length} leaves · verdict ${VERDICT[job.verdict]}`;
-      if (check) {
-        msg += check.ok
-          ? ` · ${check.matched}/${check.total} reveals verified in-browser`
-          : ` · ${check.mismatches.length} reveal mismatch(es) detected`;
+      // Fill the settlement ledger with every configured job in the
+      // background, most recent first.
+      for (let i = 1; i < CFG.jobs.length; i++) {
+        loadJobWithEvidence(i)
+          .then(() => renderLedger(Object.values(S.cache), S.active))
+          .catch((err) => console.warn("job " + i + " failed:", err));
       }
-      banner(msg, true);
-      window.ATTESTABLE = { job, bundle, check, loadJob, reverify, normalize };
     } catch (err) {
       console.error(err);
       banner("Chain read failed — showing demonstration data. " + (err.shortMessage || err.message), false);
