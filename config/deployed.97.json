@@ -1,0 +1,7 @@
+{
+  "chainId": 97,
+  "evidenceRegistry": "0x53fAEaF1ae895642F7FE4D359397C03D7b47365f",
+  "proofPolicy": "0x3e96442099A71643cfcd8d48Fa210736eB7fBb9C",
+  "router": "0x6144aB174594aE36cFa35cf980B0DaabE48a80cF",
+  "proofWindow": 3600
+}
