@@ -127,39 +127,53 @@
       S.pol.criteriaOf(jobId),
     ]);
 
-    // Rebuild the decision log from events. Storage holds only the 32-byte
-    // accumulator; the leaves live in logs, exactly as designed.
-    const logs = await queryFilterChunked(
-      S.reg,
-      S.reg.filters.LeafCommitted(jobId),
-      CFG.fromBlock || 0,
-    );
-    const leaves = logs
-      .map((l) => ({
-        index: Number(l.args.index),
-        chainHead: l.args.chainHead,
-        inputsHash: l.args.leaf.inputsHash,
-        attestationId: l.args.leaf.attestationId,
-        policyVersion: l.args.leaf.policyVersion,
-        decisionHash: l.args.leaf.decisionHash,
-        actionTxHash: l.args.leaf.actionTxHash,
-        observedAt: Number(l.args.leaf.observedAt),
-        txHash: l.transactionHash,
-        block: l.blockNumber,
-      }))
-      .sort((a, b) => a.index - b.index);
-
-    let blobURI = null;
+    // Rebuild the decision log. PRIMARY PATH: the committed leaves file,
+    // PROVEN live by verifyChain() — the registry folds the presented set and
+    // compares to its stored chainHead, which is permanent state that never
+    // prunes. FALLBACK: scan LeafCommitted logs (public testnet nodes forget
+    // old logs within days, so this only works for recent jobs).
+    let leaves = [];
+    let leavesProven = false;
     try {
-      const sealed = await queryFilterChunked(
-        S.reg,
-        S.reg.filters.RecordSealed(jobId),
-        CFG.fromBlock || 0,
-      );
-      if (sealed.length) blobURI = sealed[sealed.length - 1].args.blobURI;
+      const res = await fetch(`data/leaves-${jobId}.json`);
+      if (res.ok) {
+        const doc = await res.json();
+        const tuples = doc.leaves.map((l) => [
+          l.inputsHash, l.attestationId, l.policyVersion,
+          l.decisionHash, l.actionTxHash, l.observedAt,
+        ]);
+        leavesProven = await S.reg.verifyChain(jobId, tuples);
+        if (leavesProven) leaves = doc.leaves;
+      }
     } catch (_) {}
+    if (!leaves.length) {
+      try {
+        const logs = await queryFilterChunked(
+          S.reg,
+          S.reg.filters.LeafCommitted(jobId),
+          CFG.fromBlock || 0,
+        );
+        leaves = logs
+          .map((l) => ({
+            index: Number(l.args.index),
+            chainHead: l.args.chainHead,
+            inputsHash: l.args.leaf.inputsHash,
+            attestationId: l.args.leaf.attestationId,
+            policyVersion: l.args.leaf.policyVersion,
+            decisionHash: l.args.leaf.decisionHash,
+            actionTxHash: l.args.leaf.actionTxHash,
+            observedAt: Number(l.args.leaf.observedAt),
+            txHash: l.transactionHash,
+            block: l.blockNumber,
+          }))
+          .sort((a, b) => a.index - b.index);
+      } catch (_) {}
+    }
 
-    return { jobId, record, terms, criteria, leaves, blobURI, verdict: 0, reason: E.ZeroHash };
+    return {
+      jobId, record, terms, criteria, leaves, leavesProven,
+      blobURI: null, verdict: 0, reason: E.ZeroHash,
+    };
   }
 
   /* Independently verify a reveal bundle against the on-chain commitments.
@@ -635,7 +649,9 @@
 
   function liveBanner(e) {
     const job = e.job;
-    let msg = `Live · BSC testnet · ${job.leaves.length} leaves · verdict ${VERDICT[job.verdict]}`;
+    let msg = `Live · BSC testnet · ${job.leaves.length} leaves`;
+    if (job.leavesProven) msg += ` · verifyChain ✓`;
+    msg += ` · verdict ${VERDICT[job.verdict]}`;
     if (REASONS[job.reason]) msg += ` · ${REASONS[job.reason].split(" — ")[1]}`;
     if (e.check) {
       msg += e.check.ok
